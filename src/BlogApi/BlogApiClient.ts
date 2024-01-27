@@ -1,5 +1,5 @@
 export default class BlogApiClient {
   getPosts() {
-    return { status: 200 }
+    return fetch('https://example.com/posts')
   }
 }
