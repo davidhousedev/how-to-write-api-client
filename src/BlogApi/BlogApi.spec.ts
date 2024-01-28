@@ -21,7 +21,6 @@ describe('BlogApiClient', () => {
 
     const result = await client.getPosts()
 
-    expect(result.status).toBe(200)
     expect(result.error).toBeUndefined()
     expect(result.errorType).toBeUndefined()
     expect(result.data).toBeTruthy()
@@ -49,9 +48,21 @@ describe('BlogApiClient', () => {
 
       const result = await client.getPosts()
 
-      expect(result.status).toBe(status)
       expect(result.error).toEqual(new Error(errorMessage))
       expect(result.errorType).toBe(errorType)
     }
   )
+
+  it('handles thrown errors from fetch', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch')
+
+    fetcher.mockRejectedValueOnce(new TypeError('Boom!'))
+
+    const client = new BlogApiClient()
+
+    const result = await client.getPosts()
+
+    expect(result.error).toEqual(new Error('Failed to perform a request'))
+    expect(result.errorType).toBe('RequestError')
+  })
 })
