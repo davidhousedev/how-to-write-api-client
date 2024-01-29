@@ -1,14 +1,28 @@
+import { z } from 'zod'
+
 type Result =
   | {
-      data: Response
+      data: unknown
       error?: undefined
       errorType?: undefined
     }
   | {
       data?: undefined
       error: Error
-      errorType: 'ServerError' | 'ClientError' | 'RequestError'
+      errorType: 'ServerError' | 'ClientError' | 'RequestError' | 'TypeError'
     }
+
+const postSchema = z.object({
+  id: z.string(),
+  createdAt: z.string().datetime(),
+  content: z.string(),
+  author: z.string(),
+})
+
+/**
+ * Post represents a blog post and its content
+ */
+export type Post = z.infer<typeof postSchema>
 
 export default class BlogApiClient {
   async getPosts(): Promise<Result> {
@@ -42,8 +56,28 @@ export default class BlogApiClient {
       }
     }
 
-    return {
-      data: response,
+    try {
+      const posts = await response.json()
+
+      const parseResult = z.array(postSchema).safeParse(posts)
+
+      if (!parseResult.success) {
+        return {
+          error: new Error('Received malformed Post data', {
+            cause: parseResult.error.issues,
+          }),
+          errorType: 'TypeError',
+        }
+      }
+
+      return {
+        data: parseResult.data,
+      }
+    } catch (err) {
+      return {
+        error: new Error('Failed to parse valid JSON', { cause: err }),
+        errorType: 'TypeError',
+      }
     }
   }
 }
