@@ -1,8 +1,9 @@
 import { z } from 'zod'
+import DomainPost from '../domain/Post'
 
-type Result =
+export type Result =
   | {
-      data: unknown
+      data: Post[]
       error?: undefined
       errorType?: undefined
     }
@@ -71,7 +72,7 @@ export default class BlogApiClient {
       }
 
       return {
-        data: parseResult.data,
+        data: parseResult.data.map((apiPost) => new DomainPost(apiPost)),
       }
     } catch (err) {
       return {

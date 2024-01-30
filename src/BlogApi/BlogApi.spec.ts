@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import BlogApiClient, { Post } from './BlogApiClient'
+import Post from '../domain/Post'
+import BlogApiClient, { Post as BlogAPiPost } from './BlogApiClient'
 
 describe('BlogApiClient', () => {
   it('can get all posts', async () => {
     const fetcher = vi.spyOn(globalThis, 'fetch')
 
-    const blogPostFixture: Post = {
+    const blogPostFixture: BlogAPiPost = {
       id: 'foo',
       createdAt: '1843-12-12T14:48:00.000Z',
       content: 'Hello, world',
@@ -30,9 +31,12 @@ describe('BlogApiClient', () => {
 
     const result = await client.getPosts()
 
-    expect(result.error).toBeUndefined()
+    assertResultSuccess(result)
     expect(result.errorType).toBeUndefined()
-    expect(result.data).toEqual([blogPostFixture])
+    for (const post of result.data) {
+      expect(post).toBeInstanceOf(Post)
+    }
+    expect(result.data).toEqual([new Post(blogPostFixture)])
     expect(fetcher).toHaveBeenCalledOnce()
     expect(fetcher).toHaveBeenCalledWith('https://example.com/posts')
   })
@@ -103,3 +107,9 @@ describe('BlogApiClient', () => {
     expect(result.errorType).toBe('RequestError')
   })
 })
+
+function assertResultSuccess(
+  result: { error: Error } | { error: undefined }
+): asserts result is { error: undefined } {
+  expect(result.error).toBeUndefined()
+}
