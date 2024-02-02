@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import Post from '../domain/Post'
-import BlogApiClient, { Post as BlogAPiPost } from './BlogApiClient'
+import Comment from '../domain/Comment'
+import BlogApiClient, {
+  Post as BlogAPiPost,
+  Comment as BlogApiComment,
+} from './BlogApiClient'
 
 describe('BlogApiClient', () => {
   it('can get all posts', async () => {
@@ -39,6 +43,49 @@ describe('BlogApiClient', () => {
     expect(result.data).toEqual([new Post(blogPostFixture)])
     expect(fetcher).toHaveBeenCalledOnce()
     expect(fetcher).toHaveBeenCalledWith('https://example.com/posts')
+  })
+
+  it('can get comments on a post', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch')
+
+    const postId = '1234abcd'
+
+    const commentsFixture: BlogApiComment = {
+      id: 'foo',
+      postId: 'bar',
+      createdAt: '1843-12-12T14:48:00.000Z',
+      content: 'Hello, world',
+      author: 'Ada Lovelace',
+    }
+
+    fetcher.mockImplementationOnce(async (url, options) => {
+      if (!url) throw new Error('No URL was provided to fetch')
+
+      if (typeof url !== 'string')
+        throw new Error('Mock expects a URL string to be passed into fetch')
+
+      if (url === `https://example.com/posts/${postId}/comments`)
+        return new Response(JSON.stringify([commentsFixture]), {
+          status: 200,
+        })
+
+      return new Response(null, { status: 404 })
+    })
+
+    const client = new BlogApiClient()
+
+    const result = await client.getComments(postId)
+
+    assertResultSuccess(result)
+    expect(result.errorType).toBeUndefined()
+    for (const comment of result.data) {
+      expect(comment).toBeInstanceOf(Comment)
+    }
+    expect(result.data).toEqual([new Comment(commentsFixture)])
+    expect(fetcher).toHaveBeenCalledOnce()
+    expect(fetcher).toHaveBeenCalledWith(
+      `https://example.com/posts/${postId}/comments`
+    )
   })
 
   it('returns an error if malformed data is returned', async () => {

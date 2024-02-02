@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import DomainPost from '../domain/Post'
+import DomainComment from '../domain/Comment'
 
 export type Result =
   | {
@@ -79,6 +80,16 @@ export default class BlogApiClient {
         error: new Error('Failed to parse valid JSON', { cause: err }),
         errorType: 'TypeError',
       }
+    }
+  }
+
+  async getComments(postId: number) {
+    const response = await fetch(`https://example.com/posts/${postId}/comments`)
+    return {
+      error: undefined,
+      data: (await response.json()).map(
+        (comment) => new DomainComment(comment)
+      ),
     }
   }
 }
