@@ -17,7 +17,7 @@ describe('BlogApiClient', () => {
       author: 'Ada Lovelace',
     }
 
-    fetcher.mockImplementationOnce(async (url, options) => {
+    fetcher.mockImplementationOnce(async (url) => {
       if (!url) throw new Error('No URL was provided to fetch')
 
       if (typeof url !== 'string')
@@ -58,7 +58,7 @@ describe('BlogApiClient', () => {
       author: 'Ada Lovelace',
     }
 
-    fetcher.mockImplementationOnce(async (url, options) => {
+    fetcher.mockImplementationOnce(async (url) => {
       if (!url) throw new Error('No URL was provided to fetch')
 
       if (typeof url !== 'string')
@@ -88,44 +88,94 @@ describe('BlogApiClient', () => {
     )
   })
 
-  it('returns an error if malformed data is returned', async () => {
-    const fetcher = vi.spyOn(globalThis, 'fetch')
+  it.each([
+    ['getPosts', []],
+    ['getComments', [1234]],
+  ])(
+    'returns an error if malformed data is returned for %s',
+    async (method, args) => {
+      const fetcher = vi.spyOn(globalThis, 'fetch')
 
-    fetcher.mockResolvedValueOnce(
-      new Response(JSON.stringify([{ id: 1234 }]), { status: 200 })
-    )
+      fetcher.mockResolvedValueOnce(
+        new Response(JSON.stringify([{ id: 1234 }]), { status: 200 })
+      )
 
-    const client = new BlogApiClient()
+      const client = new BlogApiClient()
 
-    const result = await client.getPosts()
+      // @ts-expect-error - intentionally calling a method dynamically
+      const result = await client[method](...args)
 
-    expect(result.error).toEqual(new Error('Received malformed Post data'))
-    expect(result.errorType).toBe('TypeError')
-  })
-
-  it('handles JSON parse errors in the response', async () => {
-    const fetcher = vi.spyOn(globalThis, 'fetch')
-
-    fetcher.mockResolvedValueOnce(new Response('Server error', { status: 200 }))
-
-    const client = new BlogApiClient()
-
-    const result = await client.getPosts()
-
-    expect(result.error).toEqual(new Error('Failed to parse valid JSON'))
-    expect(result.errorType).toBe('TypeError')
-  })
+      expect(result.error).toEqual(new Error('Received malformed data'))
+      expect(result.errorType).toBe('TypeError')
+    }
+  )
 
   it.each([
-    [500, 'ServerError', 'Received an error from an external resource'],
-    [503, 'ServerError', 'Received an error from an external resource'],
-    [400, 'ClientError', 'Sent a problematic request to an external resource'],
-    [401, 'ClientError', 'Sent a problematic request to an external resource'],
-    [403, 'ClientError', 'Sent a problematic request to an external resource'],
-    [429, 'ClientError', 'Sent a problematic request to an external resource'],
+    ['getPosts', []],
+    ['getComments', [1234]],
   ])(
-    'handles and safely returns HTTP %i errors',
-    async (status, errorType, errorMessage) => {
+    'handles JSON parse errors in the response for %s',
+    async (method, args) => {
+      const fetcher = vi.spyOn(globalThis, 'fetch')
+
+      fetcher.mockResolvedValueOnce(
+        new Response('Server error', { status: 200 })
+      )
+
+      const client = new BlogApiClient()
+
+      // @ts-expect-error - intentionally calling a method dynamically
+      const result = await client[method](...args)
+
+      expect(result.error).toEqual(new Error('Failed to parse valid JSON'))
+      expect(result.errorType).toBe('TypeError')
+    }
+  )
+
+  it.each(
+    [['getPosts', []] as const, ['getComments', [1234]] as const].flatMap(
+      (endpoint) => [
+        [
+          500,
+          ...endpoint,
+          'ServerError',
+          'Received an error from an external resource',
+        ],
+        [
+          503,
+          ...endpoint,
+          'ServerError',
+          'Received an error from an external resource',
+        ],
+        [
+          400,
+          ...endpoint,
+          'ClientError',
+          'Sent a problematic request to an external resource',
+        ],
+        [
+          401,
+          ...endpoint,
+          'ClientError',
+          'Sent a problematic request to an external resource',
+        ],
+        [
+          403,
+          ...endpoint,
+          'ClientError',
+          'Sent a problematic request to an external resource',
+        ],
+        [
+          429,
+          ...endpoint,
+          'ClientError',
+          'Sent a problematic request to an external resource',
+        ],
+      ]
+    )
+  )(
+    'handles and safely returns HTTP %i errors for %s',
+    async (status, method, args, errorType, errorMessage) => {
       const fetcher = vi.spyOn(globalThis, 'fetch')
 
       fetcher.mockImplementationOnce(async () => {
@@ -134,21 +184,26 @@ describe('BlogApiClient', () => {
 
       const client = new BlogApiClient()
 
-      const result = await client.getPosts()
+      // @ts-expect-error - intentionally calling a method dynamically
+      const result = await client[method](...args)
 
       expect(result.error).toEqual(new Error(errorMessage))
       expect(result.errorType).toBe(errorType)
     }
   )
 
-  it('handles thrown errors from fetch', async () => {
+  it.each([
+    ['getPosts', []],
+    ['getComments', [1234]],
+  ])('handles thrown errors from fetch for %s', async (method, args) => {
     const fetcher = vi.spyOn(globalThis, 'fetch')
 
     fetcher.mockRejectedValueOnce(new TypeError('Boom!'))
 
     const client = new BlogApiClient()
 
-    const result = await client.getPosts()
+    // @ts-expect-error - intentionally calling a method dynamically
+    const result = await client[method](...args)
 
     expect(result.error).toEqual(new Error('Failed to perform a request'))
     expect(result.errorType).toBe('RequestError')

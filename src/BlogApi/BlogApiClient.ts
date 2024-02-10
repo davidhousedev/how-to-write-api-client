@@ -1,18 +1,20 @@
 import { z } from 'zod'
-import DomainPost from '../domain/Post'
 import DomainComment from '../domain/Comment'
+import DomainPost from '../domain/Post'
 
-export type Result =
-  | {
-      data: Post[]
-      error?: undefined
-      errorType?: undefined
-    }
-  | {
-      data?: undefined
-      error: Error
-      errorType: 'ServerError' | 'ClientError' | 'RequestError' | 'TypeError'
-    }
+type Ok<T> = {
+  data: T
+  error?: undefined
+  errorType?: undefined
+}
+
+type Err = {
+  data?: undefined
+  error: Error
+  errorType: 'ServerError' | 'ClientError' | 'RequestError' | 'TypeError'
+}
+
+export type Result<T> = Ok<T> | Err
 
 const postSchema = z.object({
   id: z.string(),
@@ -26,70 +28,124 @@ const postSchema = z.object({
  */
 export type Post = z.infer<typeof postSchema>
 
+const commentSchema = z.object({
+  id: z.string(),
+  postId: z.string(),
+  createdAt: z.string().datetime(),
+  content: z.string(),
+  author: z.string(),
+})
+
+/**
+ * Comment represents a comment on a blog post
+ */
+export type Comment = z.infer<typeof commentSchema>
+
 export default class BlogApiClient {
-  async getPosts(): Promise<Result> {
+  async getPosts(): Promise<Result<DomainPost[]>> {
+    return this.callApi(`https://example.com/posts`, (data) =>
+      this.handleGetPostsResponse(data)
+    )
+  }
+
+  async getComments(postId: string): Promise<Result<DomainComment[]>> {
+    return this.callApi(
+      `https://example.com/posts/${postId}/comments`,
+      (data) => this.handleGetCommentsResponse(data)
+    )
+  }
+
+  private async callApi<T>(
+    url: string,
+    responseParser: (json: unknown) => Promise<Result<T>>
+  ) {
     let response: Response
     try {
-      response = await fetch('https://example.com/posts')
+      response = await fetch(url)
     } catch (err) {
-      return {
-        error: new Error('Failed to perform a request', {
-          cause: err,
-        }),
-        errorType: 'RequestError',
-      }
+      return this.handleRequestError(err)
     }
 
     if (response.status >= 500 && response.status < 600) {
-      return {
-        error: new Error('Received an error from an external resource', {
-          cause: response,
-        }),
-        errorType: 'ServerError',
-      }
+      return this.handleServerError(response)
     }
 
     if (response.status >= 400 && response.status < 500) {
-      return {
-        error: new Error('Sent a problematic request to an external resource', {
-          cause: response,
-        }),
-        errorType: 'ClientError',
-      }
+      return this.handleClientError(response)
     }
 
     try {
-      const posts = await response.json()
-
-      const parseResult = z.array(postSchema).safeParse(posts)
-
-      if (!parseResult.success) {
-        return {
-          error: new Error('Received malformed Post data', {
-            cause: parseResult.error.issues,
-          }),
-          errorType: 'TypeError',
-        }
-      }
-
-      return {
-        data: parseResult.data.map((apiPost) => new DomainPost(apiPost)),
-      }
+      const data = await response.json()
+      return await responseParser(data)
     } catch (err) {
-      return {
-        error: new Error('Failed to parse valid JSON', { cause: err }),
-        errorType: 'TypeError',
-      }
+      return this.handleJsonParseError(err)
     }
   }
 
-  async getComments(postId: number) {
-    const response = await fetch(`https://example.com/posts/${postId}/comments`)
-    return {
-      error: undefined,
-      data: (await response.json()).map(
-        (comment) => new DomainComment(comment)
-      ),
+  private async handleGetPostsResponse(json: unknown) {
+    const parseResult = z.array(postSchema).safeParse(json)
+
+    if (!parseResult.success) {
+      return this.handleMalformedData(parseResult.error.issues)
     }
+
+    return {
+      data: parseResult.data.map((apiPost) => new DomainPost(apiPost)),
+    } satisfies Ok<DomainPost[]>
+  }
+
+  private async handleGetCommentsResponse(json: unknown) {
+    const parseResult = z.array(commentSchema).safeParse(json)
+
+    if (!parseResult.success) {
+      return this.handleMalformedData(parseResult.error.issues)
+    }
+
+    return {
+      data: parseResult.data.map((apiComment) => new DomainComment(apiComment)),
+    } satisfies Ok<DomainComment[]>
+  }
+
+  private handleRequestError(err: unknown) {
+    return {
+      error: new Error('Failed to perform a request', {
+        cause: err,
+      }),
+      errorType: 'RequestError',
+    } satisfies Err
+  }
+
+  private handleClientError(response: Response) {
+    return {
+      error: new Error('Sent a problematic request to an external resource', {
+        cause: response,
+      }),
+      errorType: 'ClientError',
+    } satisfies Err
+  }
+
+  private handleMalformedData(issues: z.ZodIssue[]) {
+    return {
+      error: new Error('Received malformed data', {
+        cause: issues,
+      }),
+      errorType: 'TypeError',
+    } satisfies Err
+  }
+
+  private handleServerError(response: Response) {
+    return {
+      error: new Error('Received an error from an external resource', {
+        cause: response,
+      }),
+      errorType: 'ServerError',
+    } satisfies Err
+  }
+
+  private handleJsonParseError(err: unknown) {
+    return {
+      error: new Error('Failed to parse valid JSON', { cause: err }),
+      errorType: 'TypeError',
+    } satisfies Err
   }
 }
